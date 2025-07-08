@@ -4,7 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 
 // --- Gemini AI Setup ---
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const geminiModel = 'gemini-2.5-flash-preview-04-17';
+const geminiModel = 'gemini-2.0-flash';
 
 // --- DATA & COORDINATES ---
 const CITIES_FOR_WEATHER = [
