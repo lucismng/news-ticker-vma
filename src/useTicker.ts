@@ -3,8 +3,17 @@ import { WeatherData, StockData, ForexData, GoldPrices, FuelPrices } from './typ
 import { GoogleGenAI } from '@google/genai';
 
 // --- Gemini AI Setup ---
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
-const geminiModel = 'gemini-2.0-flash';
+const API_KEYS = (import.meta.env.VITE_API_KEYS || '').split(',').map(k => k.trim()).filter(Boolean);
+let currentApiKeyIndex = 0;
+
+const getAiInstance = () => {
+    if (API_KEYS.length === 0) return null;
+    const apiKey = API_KEYS[currentApiKeyIndex];
+    currentApiKeyIndex = (currentApiKeyIndex + 1) % API_KEYS.length;
+    return new GoogleGenAI({ apiKey });
+};
+
+const geminiModel = 'gemini-2.5-flash-preview-04-17';
 
 // --- DATA & COORDINATES ---
 const CITIES_FOR_WEATHER = [
@@ -86,6 +95,7 @@ export const useTicker = () => {
     const [isManualInputPanelOpen, setIsManualInputPanelOpen] = useState(false);
     const [isManualNewsLoading, setIsManualNewsLoading] = useState(false);
     const [manualNewsError, setManualNewsError] = useState<string | null>(null);
+    const [isErrorState, setIsErrorState] = useState(false);
     
     // Ticker View State
     const [currentInfoBar, setCurrentInfoBar] = useState<'weather' | 'stocks' | 'forex' | 'gold' | 'fuel'>('weather');
@@ -152,6 +162,8 @@ export const useTicker = () => {
 
         const prompt = `Liệt kê 10 tin tức nóng hổi, quan trọng nhất tại Việt Nam và thế giới trong giờ qua. Hãy sử dụng văn phong báo chí trung lập, khách quan, tránh các từ ngữ nhạy cảm hoặc gây tranh cãi. Trả về dưới dạng một mảng JSON các chuỗi tóm tắt. Ví dụ: ["Tóm tắt tin tức 1", "Tóm tắt tin tức 2"]`;
         try {
+            const ai = getAiInstance();
+            if (!ai) throw new Error("API key không được cấu hình.");
             const response = await ai.models.generateContent({ model: geminiModel, contents: prompt, config: { tools: [{googleSearch: {}}] } });
             const summaries = parseGeminiJson<string[]>(response.text);
             if (summaries && summaries.length > 0) setNewsItems(summaries);
@@ -196,9 +208,11 @@ export const useTicker = () => {
 
             if (weatherArray.length > 0) {
                  const weatherMap = new Map<string, WeatherData>();
-                 weatherArray.forEach((data, index) => {
-                    const originalCityName = CITIES_FOR_WEATHER[index];
-                    weatherMap.set(originalCityName, { ...data, city: originalCityName });
+                 CITIES_FOR_WEATHER.forEach((originalCityName, index) => {
+                    const foundData = weatherArray.find(d => d.city.toLowerCase().includes(originalCityName.toLowerCase().split(' ')[0]));
+                    if (foundData) {
+                       weatherMap.set(originalCityName, { ...foundData, city: originalCityName });
+                    }
                  });
                 setWeatherData(weatherMap);
             } else {
@@ -212,8 +226,14 @@ export const useTicker = () => {
 
     const fetchBackgroundData = useCallback(async () => {
         console.log("Bắt đầu cập nhật dữ liệu tài chính và thời tiết...");
-        const financePrompt = `Cung cấp dữ liệu tài chính mới nhất. Trả lời bằng một đối tượng JSON duy nhất có năm khóa: "vietnamStocks", "worldStocks", "forex", "goldPrices", và "fuelPrices". - "vietnamStocks": mảng các đối tượng cho VN-INDEX, HNX-INDEX, UPCOM. - "worldStocks": mảng các đối tượng cho DOW JONES, S&P 500, NIKKEI 225. - "forex": mảng các đối tượng cho USD, EUR, JPY. - "goldPrices": đối tượng có "domestic" (SJC, 9999) và "world" (Spot Gold). - "fuelPrices": đối tượng có "domestic" (RON95-V, E5 RON92) và "world" (BRENT, WTI).`;
-        const weatherPrompt = `Cung cấp dữ liệu thời tiết hiện tại cho danh sách thành phố Việt Nam sau: ${JSON.stringify(CITIES_FOR_WEATHER)}. Trả về dưới dạng một mảng JSON các đối tượng.`;
+        const ai = getAiInstance();
+        if (!ai) {
+             setIsErrorState(true);
+             return;
+        }
+
+        const financePrompt = `Cung cấp dữ liệu tài chính mới nhất. Trả lời bằng một đối tượng JSON duy nhất có năm khóa: "vietnamStocks", "worldStocks", "forex", "goldPrices", và "fuelPrices". - "vietnamStocks": mảng các đối tượng cho VN-INDEX, HNX-INDEX, UPCOM. - "worldStocks": mảng các đối tượng cho DOW JONES, S&P 500, NIKKEI 225. - "forex": mảng các đối tượng cho USD, EUR, JPY. - "goldPrices": đối tượng có "domestic" (SJC, 9999) và "world" (Spot Gold). - "fuelPrices": đối tượng có "domestic" (RON95-V, E5 RON92) và "world" (BRENT, WTI). Trả lời bằng JSON thuần túy.`;
+        const weatherPrompt = `Cung cấp dữ liệu thời tiết hiện tại cho danh sách thành phố Việt Nam sau: ${JSON.stringify(CITIES_FOR_WEATHER)}. Trả về dưới dạng một mảng JSON các đối tượng. Mỗi đối tượng phải chứa chính xác tên thành phố được cung cấp. Trả lời bằng JSON thuần túy.`;
 
         try {
             const [financeResponse, weatherResponse] = await Promise.all([
@@ -254,6 +274,13 @@ export const useTicker = () => {
         setIsManualNewsLoading(true);
         setManualNewsError(null);
         
+        const ai = getAiInstance();
+        if (!ai) {
+            setManualNewsError("Lỗi: API Keys chưa được cấu hình.");
+            setIsManualNewsLoading(false);
+            return;
+        }
+        
         const prompt = `Tạo JSON với khóa "title" (tiêu đề siêu ngắn cho "${topic}") và "summaries" (mảng ${count} tóm tắt tin tức mới nhất liên quan đến chủ đề này trong vòng 1 giờ qua). Hãy tóm tắt với văn phong báo chí trung lập, khách quan, phù hợp với mọi đối tượng và tránh các từ ngữ nhạy cảm hoặc gây tranh cãi. Ưu tiên các tin tức có nguồn uy tín.`;
 
         try {
@@ -272,7 +299,7 @@ export const useTicker = () => {
                 }, 600);
                 setIsManualInputPanelOpen(false); // Close panel on success
             } else {
-                 const errorMsg = "AI không trả về dữ liệu hợp lệ. Vui lòng thử lại với chủ đề khác.";
+                 const errorMsg = "AI không trả về dữ liệu hợp lệ. Vui lòng thử lại với chủ đề khác hoặc kiểm tra lại prompt.";
                  console.error("Lỗi tạo tin tức thủ công:", errorMsg);
                  setManualNewsError(errorMsg);
             }
@@ -334,6 +361,10 @@ export const useTicker = () => {
 
     // --- Effects ---
     useEffect(() => {
+        if (API_KEYS.length === 0) {
+            setIsErrorState(true);
+            return;
+        }
         const runUpdates = () => {
             fetchNews();
             fetchBackgroundData();
@@ -374,6 +405,7 @@ export const useTicker = () => {
         currentCityWeather,
         newsString,
         manualNewsError,
+        isErrorState,
         toggleBreakingNewsMode, fetchManualBreakingNews, openManualPanel, closeManualPanel,
     };
 };
