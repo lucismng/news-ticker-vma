@@ -201,8 +201,8 @@ export const useTicker = () => {
 
         try {
             const [financeResponse, weatherResponse] = await Promise.all([
-                ai.models.generateContent({ model: geminiModel, contents: financePrompt, config: { responseMimeType: "application/json", tools: [{googleSearch: {}}] } }),
-                ai.models.generateContent({ model: geminiModel, contents: weatherPrompt, config: { responseMimeType: "application/json", tools: [{googleSearch: {}}] } })
+                ai.models.generateContent({ model: geminiModel, contents: financePrompt, config: { tools: [{googleSearch: {}}] } }),
+                ai.models.generateContent({ model: geminiModel, contents: weatherPrompt, config: { tools: [{googleSearch: {}}] } })
             ]);
 
             const finData = parseGeminiJson<{vietnamStocks: StockData[], worldStocks: StockData[], forex: ForexData[], goldPrices: GoldPrices, fuelPrices: FuelPrices}>(financeResponse.text);
@@ -228,7 +228,7 @@ export const useTicker = () => {
         setIsManualNewsLoading(true); setIsManualInputPanelOpen(false); setError(null); setNewsItems([]);
         const prompt = `Tạo JSON với khóa "title" (tiêu đề siêu ngắn cho "${topic}") và "summaries" (mảng ${count} tóm tắt tin tức liên quan).`;
         try {
-            const response = await ai.models.generateContent({ model: geminiModel, contents: prompt, config: { responseMimeType: "application/json", tools: [{ googleSearch: {} }] } });
+            const response = await ai.models.generateContent({ model: geminiModel, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
             const data = parseGeminiJson<{ title: string, summaries: string[] }>(response.text);
             if (data?.title && data?.summaries?.length > 0) {
                 setAnimationState('flipping');
@@ -253,7 +253,7 @@ export const useTicker = () => {
     
     const newsString = useMemo(() => {
         if (error) return error;
-        if (newsItems.length === 0) return '';
+        if (newsItems.length === 0) return 'Đang tải tin tức...';
         const SEPARATOR = `\u00A0\u00A0●\u00A0\u00A0`;
         const formatNewsItem = (item: string) => `\u00A0\u00A0\u00A0\u00A0\u00A0${item.trim().replace(/\.$/, '')}\u00A0\u00A0\u00A0\u00A0\u00A0`;
         return newsItems.map(formatNewsItem).join(SEPARATOR);
