@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { WeatherData, StockData, ForexData, GoldPrices, FuelPrices } from './types';
 import { GoogleGenAI } from '@google/genai';
@@ -11,18 +10,6 @@ const geminiModel = 'gemini-2.5-flash-preview-04-17';
 const CITIES_FOR_WEATHER = [
     "Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ", "Thanh Hóa", "Vinh", "Nha Trang", "Quy Nhơn", "Huế", "Đà Lạt", "Buôn Ma Thuột", "Pleiku", "Biên Hòa", "Thủ Dầu Một", "Vũng Tàu", "Mỹ Tho", "Long Xuyên", "Rạch Giá", "Cà Mau", "Hạ Long", "Thái Nguyên", "Nam Định", "Việt Trì", "Phú Quốc"
 ];
-
-const CITY_COORDINATES: { [key: string]: { lat: number; lon: number } } = {
-    "Hà Nội": { lat: 21.0285, lon: 105.8542 }, "TP. Hồ Chí Minh": { lat: 10.7769, lon: 106.7009 }, "Đà Nẵng": { lat: 16.0545, lon: 108.2022 },
-    "Hải Phòng": { lat: 20.8458, lon: 106.6881 }, "Cần Thơ": { lat: 10.0452, lon: 105.7469 }, "Thanh Hóa": { lat: 19.8005, lon: 105.7796 },
-    "Vinh": { lat: 18.6752, lon: 105.6942 }, "Nha Trang": { lat: 12.2388, lon: 109.1967 }, "Quy Nhơn": { lat: 13.7808, lon: 109.2223 },
-    "Huế": { lat: 16.4637, lon: 107.5909 }, "Đà Lạt": { lat: 11.9404, lon: 108.4583 }, "Buôn Ma Thuột": { lat: 12.6683, lon: 108.0436 },
-    "Pleiku": { lat: 13.9785, lon: 108.0023 }, "Biên Hòa": { lat: 10.9576, lon: 106.8432 }, "Thủ Dầu Một": { lat: 11.0069, lon: 106.6631 },
-    "Vũng Tàu": { lat: 10.3458, lon: 107.0843 }, "Mỹ Tho": { lat: 10.3592, lon: 106.3533 }, "Long Xuyên": { lat: 10.3807, lon: 105.4243 },
-    "Rạch Giá": { lat: 10.0125, lon: 105.0825 }, "Cà Mau": { lat: 9.1764, lon: 105.1531 }, "Hạ Long": { lat: 20.9575, lon: 107.0758 },
-    "Thái Nguyên": { lat: 21.5928, lon: 105.8442 }, "Nam Định": { lat: 20.4344, lon: 106.1771 }, "Việt Trì": { lat: 21.3121, lon: 105.3940 },
-    "Phú Quốc": { lat: 10.2288, lon: 103.9574 },
-};
 
 // --- Fallback Data Constants ---
 const FALLBACK_VIETNAM_STOCKS: StockData[] = [
@@ -84,7 +71,7 @@ export const useTicker = () => {
     // Data State
     const [newsItems, setNewsItems] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [weatherData, setWeatherData] = useState<WeatherData[] | null>(null);
+    const [weatherData, setWeatherData] = useState<Map<string, WeatherData> | null>(null);
     const [vietnamStockData, setVietnamStockData] = useState<StockData[] | null>(null);
     const [worldStockData, setWorldStockData] = useState<StockData[] | null>(null);
     const [forexData, setForexData] = useState<ForexData[] | null>(null);
@@ -130,12 +117,9 @@ export const useTicker = () => {
                         const descriptionNode = item.querySelector("description");
                         if (!descriptionNode?.textContent) return '';
                         
-                        // The description content often contains HTML inside a CDATA section.
-                        // We need to parse this HTML to extract only the plain text.
                         const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = descriptionNode.textContent; // This parses the HTML string
+                        tempDiv.innerHTML = descriptionNode.textContent;
                         
-                        // .textContent will strip all HTML tags and return only the plain text.
                         const cleanText = (tempDiv.textContent || tempDiv.innerText || "").trim();
                         return cleanText;
                     }).filter(Boolean);
@@ -177,19 +161,50 @@ export const useTicker = () => {
     }, [isBreakingNewsMode, animationState, fetchRssNews, customBreakingNewsTitle]);
     
     const fetchFallbackWeatherData = useCallback(async () => {
-        console.log("Gemini lỗi. Kích hoạt API thời tiết dự phòng (Open-Meteo)...");
+        console.log("Gemini lỗi. Kích hoạt API thời tiết dự phòng (wttr.in)...");
         try {
-            const fetchPromises = CITIES_FOR_WEATHER.map(city => {
-                const coords = CITY_COORDINATES[city];
-                if (!coords) return Promise.resolve(null);
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&current=relative_humidity_2m&timezone=Asia/Ho_Chi_Minh`;
-                return fetch(url).then(res => res.json());
+            const fetchPromises = CITIES_FOR_WEATHER.map(async (city) => {
+                try {
+                    const url = `https://wttr.in/${encodeURIComponent(city)}?format=j1`;
+                    const response = await fetch(url);
+                    if (!response.ok) return null;
+                    const data = await response.json();
+
+                    if (!data.weather || !data.current_condition) return null;
+
+                    const maxRainChance = data.weather[0]?.hourly?.reduce((max: number, hour: any) => {
+                        const chance = parseInt(hour.chanceofrain, 10);
+                        return isNaN(chance) ? max : Math.max(max, chance);
+                    }, 0) ?? 0;
+
+                    return {
+                        city: data.nearest_area[0].areaName[0].value,
+                        tempMax: parseInt(data.weather[0].maxtempC, 10),
+                        tempMin: parseInt(data.weather[0].mintempC, 10),
+                        humidity: parseInt(data.current_condition[0].humidity, 10),
+                        rainChance: maxRainChance,
+                    };
+                } catch (cityError) {
+                    console.error(`Lỗi khi lấy dữ liệu thời tiết cho ${city}:`, cityError);
+                    return null;
+                }
             });
+
             const results = await Promise.all(fetchPromises);
-            const allWeatherData: WeatherData[] = results.map((data, index) => data ? { city: CITIES_FOR_WEATHER[index], tempMax: Math.round(data.daily.temperature_2m_max[0]), tempMin: Math.round(data.daily.temperature_2m_min[0]), humidity: Math.round(data.current.relative_humidity_2m), rainChance: Math.round(data.daily.precipitation_probability_max[0]), } : null).filter((d): d is WeatherData => d !== null);
-            if (allWeatherData.length > 0) setWeatherData(allWeatherData);
-            else throw new Error("API thời tiết dự phòng thất bại.");
+            const weatherArray = results.filter((d): d is WeatherData => d !== null);
+
+            if (weatherArray.length > 0) {
+                 const weatherMap = new Map<string, WeatherData>();
+                 weatherArray.forEach((data, index) => {
+                    const originalCityName = CITIES_FOR_WEATHER[index];
+                    weatherMap.set(originalCityName, { ...data, city: originalCityName });
+                 });
+                setWeatherData(weatherMap);
+            } else {
+                throw new Error("API thời tiết dự phòng (wttr.in) thất bại.");
+            }
         } catch (e) {
+            console.error("Lỗi với API thời tiết dự phòng:", e);
             setWeatherData(null);
         }
     }, []);
@@ -214,9 +229,19 @@ export const useTicker = () => {
                 setFuelData(finData.fuelPrices || FALLBACK_FUEL_PRICES);
             } else throw new Error("Finance data parsing failed.");
 
-            const allWeatherData = parseGeminiJson<WeatherData[]>(weatherResponse.text);
-            if (allWeatherData && allWeatherData.length > 0) setWeatherData(allWeatherData);
-            else await fetchFallbackWeatherData();
+            const weatherArray = parseGeminiJson<WeatherData[]>(weatherResponse.text);
+            if (weatherArray && weatherArray.length > 0) {
+                const weatherMap = new Map<string, WeatherData>();
+                for (const cityName of CITIES_FOR_WEATHER) {
+                    const data = weatherArray.find(d => d.city.toLowerCase() === cityName.toLowerCase());
+                    if (data) {
+                        weatherMap.set(cityName, data);
+                    }
+                }
+                setWeatherData(weatherMap);
+            } else {
+                 await fetchFallbackWeatherData();
+            }
         } catch (e) {
             console.error("Lỗi lấy dữ liệu nền từ Gemini. Kích hoạt chế độ dự phòng.", e);
             setVietnamStockData(FALLBACK_VIETNAM_STOCKS); setWorldStockData(FALLBACK_WORLD_STOCKS); setForexData(FALLBACK_FOREX_DATA); setGoldData(FALLBACK_GOLD_PRICES); setFuelData(FALLBACK_FUEL_PRICES);
@@ -226,7 +251,7 @@ export const useTicker = () => {
 
     const fetchManualBreakingNews = useCallback(async (topic: string, count: number) => {
         setIsManualNewsLoading(true); setIsManualInputPanelOpen(false); setError(null); setNewsItems([]);
-        const prompt = `Tạo JSON với khóa "title" (tiêu đề siêu ngắn cho "${topic}") và "summaries" (mảng ${count} tóm tắt tin tức liên quan).`;
+        const prompt = `Tạo JSON với khóa "title" (tiêu đề siêu ngắn cho "${topic}") và "summaries" (mảng ${count} tóm tắt tin tức mới nhất, phù hợp nhất liên quan đến chủ đề này trong vòng 1 giờ vừa qua). Ưu tiên các tin tức có nguồn uy tín.`;
         try {
             const response = await ai.models.generateContent({ model: geminiModel, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
             const data = parseGeminiJson<{ title: string, summaries: string[] }>(response.text);
@@ -268,6 +293,9 @@ export const useTicker = () => {
       }, 300);
       setTimeout(() => setBottomBarAnimationState('idle'), 600);
     }, [bottomBarAnimationState]);
+    
+    const currentCityName = CITIES_FOR_WEATHER[currentCityIndex];
+    const currentCityWeather = weatherData ? (weatherData.get(currentCityName) || null) : null;
 
     // --- Effects ---
     useEffect(() => {
@@ -284,7 +312,10 @@ export const useTicker = () => {
         if (currentInfoBar !== 'weather') return;
         const cityInterval = setInterval(() => {
             setCurrentCityIndex(prev => {
-                if (prev + 1 >= CITIES_FOR_WEATHER.length) { switchToNextInfoBar(); return 0; }
+                if (prev + 1 >= CITIES_FOR_WEATHER.length) { 
+                    switchToNextInfoBar(); 
+                    return 0; 
+                }
                 return prev + 1;
             });
         }, WEATHER_CITY_DURATION);
@@ -302,9 +333,10 @@ export const useTicker = () => {
     useEffect(() => { if (currentInfoBar === 'fuel') { const i = setInterval(() => setFuelView(p => p === 'domestic' ? 'world' : 'domestic'), 7000); return () => clearInterval(i); }}, [currentInfoBar]);
 
     return {
-        newsItems, error, weatherData, vietnamStockData, worldStockData, forexData, goldData, fuelData,
+        newsItems, error, vietnamStockData, worldStockData, forexData, goldData, fuelData,
         isBreakingNewsMode, customBreakingNewsTitle, animationState, bottomBarAnimationState, isManualInputPanelOpen, isManualNewsLoading,
-        currentInfoBar, currentCityIndex, stockView, goldView, fuelView,
+        currentInfoBar, stockView, goldView, fuelView,
+        currentCityWeather,
         newsString,
         toggleBreakingNewsMode, fetchManualBreakingNews, setIsManualInputPanelOpen
     };
