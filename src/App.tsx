@@ -10,9 +10,10 @@ const App = () => {
     <>
       <ManualNewsInputPanel
         isOpen={ticker.isManualInputPanelOpen}
-        onClose={() => ticker.setIsManualInputPanelOpen(false)}
+        onClose={ticker.closeManualPanel}
         onSubmit={ticker.fetchManualBreakingNews}
         isLoading={ticker.isManualNewsLoading}
+        error={ticker.manualNewsError}
       />
       <div className="fixed bottom-5 left-11 right-11 shadow-2xl rounded-lg" style={{ perspective: '800px' }}>
         <div className="flex h-10 items-stretch shadow-md rounded-t-lg overflow-hidden">
@@ -35,7 +36,7 @@ const App = () => {
             isBreakingNewsMode={ticker.isBreakingNewsMode}
             currentInfoBar={ticker.currentInfoBar}
             bottomBarAnimationState={ticker.bottomBarAnimationState}
-            onLabelClick={() => ticker.setIsManualInputPanelOpen(true)}
+            onLabelClick={ticker.openManualPanel}
             currentCityWeather={ticker.currentCityWeather}
             stockView={ticker.stockView}
             vietnamStockData={ticker.vietnamStockData}
