@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { WeatherData, StockData, ForexData, GoldData, WorldGoldData, GoldPrices, FuelData, FuelPrices } from './types';
 
@@ -140,8 +139,7 @@ export const BottomBar = (props: {
     currentInfoBar: 'weather' | 'stocks' | 'forex' | 'gold' | 'fuel',
     bottomBarAnimationState: 'idle' | 'flipping',
     onLabelClick: () => void,
-    weatherData: WeatherData[] | null,
-    currentCityIndex: number,
+    currentCityWeather: WeatherData | null,
     stockView: 'vietnam' | 'world',
     vietnamStockData: StockData[] | null,
     worldStockData: StockData[] | null,
@@ -170,8 +168,7 @@ export const BottomBar = (props: {
             label = props.fuelView === 'domestic' ? "GIÁ XĂNG DẦU" : "DẦU THÔ THẾ GIỚI";
             break;
         default: // 'weather'
-            const currentCityWeather = props.weatherData && props.weatherData.length > props.currentCityIndex ? props.weatherData[props.currentCityIndex] : null;
-            content = <WeatherBar data={currentCityWeather} isBreakingNewsMode={props.isBreakingNewsMode} />;
+            content = <WeatherBar data={props.currentCityWeather} isBreakingNewsMode={props.isBreakingNewsMode} />;
             label = "THỜI TIẾT";
             break;
     }
