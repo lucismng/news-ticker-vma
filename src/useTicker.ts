@@ -54,7 +54,7 @@ const FALLBACK_FUEL_PRICES: FuelPrices = {
         { name: 'WTI', price: 78.50 },
     ],
 };
-const INFO_BAR_ORDER: Array<'weather' | 'stocks' | 'forex' | 'gold' | 'fuel'> = ['weather', 'stocks', 'forex', 'gold', 'fuel'];
+
 const NON_WEATHER_BAR_DURATION = 10000;
 const WEATHER_CITY_DURATION = 3000;
 
@@ -74,6 +74,15 @@ const parseGeminiJson = <T,>(text: string): T | null => {
     return null;
   }
 };
+
+interface CombinedData {
+    weatherData: WeatherData[];
+    vietnamStocks: StockData[];
+    worldStocks: StockData[];
+    forex: ForexData[];
+    goldPrices: GoldPrices;
+    fuelPrices: FuelPrices;
+}
 
 // --- Main Logic Hook ---
 export const useTicker = () => {
@@ -98,7 +107,7 @@ export const useTicker = () => {
     const [isErrorState, setIsErrorState] = useState(false);
     
     // Ticker View State
-    const [currentInfoBar, setCurrentInfoBar] = useState<'weather' | 'stocks' | 'forex' | 'gold' | 'fuel'>('weather');
+    const [currentInfoBar, setCurrentInfoBar] = useState<'weather' | 'stocks' | 'forex' | 'gold' | 'fuel'>('stocks');
     const [currentCityIndex, setCurrentCityIndex] = useState(0);
     const [stockView, setStockView] = useState<'vietnam' | 'world'>('vietnam');
     const [goldView, setGoldView] = useState<'domestic' | 'world'>('domestic');
@@ -172,103 +181,63 @@ export const useTicker = () => {
             await fetchRssNews();
         }
     }, [isBreakingNewsMode, animationState, fetchRssNews, customBreakingNewsTitle]);
-    
-    const fetchFallbackWeatherData = useCallback(async () => {
-        console.log("Gemini lỗi. Kích hoạt API thời tiết dự phòng (wttr.in)...");
-        try {
-            const fetchPromises = CITIES_FOR_WEATHER.map(async (city) => {
-                try {
-                    const url = `https://wttr.in/${encodeURIComponent(city)}?format=j1`;
-                    const response = await fetch(url);
-                    if (!response.ok) return null;
-                    const data = await response.json();
-
-                    if (!data.weather || !data.current_condition) return null;
-
-                    const maxRainChance = data.weather[0]?.hourly?.reduce((max: number, hour: any) => {
-                        const chance = parseInt(hour.chanceofrain, 10);
-                        return isNaN(chance) ? max : Math.max(max, chance);
-                    }, 0) ?? 0;
-
-                    return {
-                        city: data.nearest_area[0].areaName[0].value,
-                        tempMax: parseInt(data.weather[0].maxtempC, 10),
-                        tempMin: parseInt(data.weather[0].mintempC, 10),
-                        humidity: parseInt(data.current_condition[0].humidity, 10),
-                        rainChance: maxRainChance,
-                    };
-                } catch (cityError) {
-                    console.error(`Lỗi khi lấy dữ liệu thời tiết cho ${city}:`, cityError);
-                    return null;
-                }
-            });
-
-            const results = await Promise.all(fetchPromises);
-            const weatherArray = results.filter((d): d is WeatherData => d !== null);
-
-            if (weatherArray.length > 0) {
-                 const weatherMap = new Map<string, WeatherData>();
-                 CITIES_FOR_WEATHER.forEach((originalCityName, index) => {
-                    const foundData = weatherArray.find(d => d.city.toLowerCase().includes(originalCityName.toLowerCase().split(' ')[0]));
-                    if (foundData) {
-                       weatherMap.set(originalCityName, { ...foundData, city: originalCityName });
-                    }
-                 });
-                setWeatherData(weatherMap);
-            } else {
-                throw new Error("API thời tiết dự phòng (wttr.in) thất bại.");
-            }
-        } catch (e) {
-            console.error("Lỗi với API thời tiết dự phòng:", e);
-            setWeatherData(null);
-        }
-    }, []);
 
     const fetchBackgroundData = useCallback(async () => {
-        console.log("Bắt đầu cập nhật dữ liệu tài chính và thời tiết...");
+        console.log("Bắt đầu cập nhật toàn bộ dữ liệu nền bằng một lệnh gọi API...");
         const ai = getAiInstance();
         if (!ai) {
              setIsErrorState(true);
              return;
         }
 
-        const financePrompt = `Cung cấp dữ liệu tài chính mới nhất. Trả lời bằng một đối tượng JSON duy nhất có năm khóa: "vietnamStocks", "worldStocks", "forex", "goldPrices", và "fuelPrices". - "vietnamStocks": mảng các đối tượng cho VN-INDEX, HNX-INDEX, UPCOM. - "worldStocks": mảng các đối tượng cho DOW JONES, S&P 500, NIKKEI 225. - "forex": mảng các đối tượng cho USD, EUR, JPY. - "goldPrices": đối tượng có "domestic" (SJC, 9999) và "world" (Spot Gold). - "fuelPrices": đối tượng có "domestic" (RON95-V, E5 RON92) và "world" (BRENT, WTI). Trả lời bằng JSON thuần túy.`;
-        const weatherPrompt = `Cung cấp dữ liệu thời tiết hiện tại cho danh sách thành phố Việt Nam sau: ${JSON.stringify(CITIES_FOR_WEATHER)}. Trả về dưới dạng một mảng JSON các đối tượng. Mỗi đối tượng phải chứa chính xác tên thành phố được cung cấp. Trả lời bằng JSON thuần túy.`;
+        const combinedPrompt = `Sử dụng Google Search để lấy dữ liệu mới nhất và trả về MỘT đối tượng JSON duy nhất có các khóa sau: "weatherData", "vietnamStocks", "worldStocks", "forex", "goldPrices", và "fuelPrices".
+- "weatherData": Một mảng các đối tượng thời tiết cho các thành phố sau: ${JSON.stringify(CITIES_FOR_WEATHER)}. Mỗi đối tượng phải chứa 'city', 'tempMin', 'tempMax', 'humidity', 'rainChance'.
+- "vietnamStocks": Một mảng các đối tượng cho VN-INDEX, HNX-INDEX, UPCOM.
+- "worldStocks": Một mảng các đối tượng cho DOW JONES, S&P 500, NIKKEI 225.
+- "forex": Một mảng các đối tượng cho tỷ giá USD, EUR, JPY.
+- "goldPrices": Một đối tượng chứa khóa "domestic" (cho vàng SJC, 9999) và "world" (cho Spot Gold).
+- "fuelPrices": Một đối tượng chứa khóa "domestic" (cho xăng RON95-V, E5 RON92) và "world" (cho dầu BRENT, WTI).
+Hãy đảm bảo dữ liệu là chính xác và mới nhất.`;
 
         try {
-            const [financeResponse, weatherResponse] = await Promise.all([
-                ai.models.generateContent({ model: geminiModel, contents: financePrompt, config: { tools: [{googleSearch: {}}] } }),
-                ai.models.generateContent({ model: geminiModel, contents: weatherPrompt, config: { tools: [{googleSearch: {}}] } })
-            ]);
+            const response = await ai.models.generateContent({ model: geminiModel, contents: combinedPrompt, config: { tools: [{googleSearch: {}}] } });
+            const data = parseGeminiJson<CombinedData>(response.text);
+            
+            if (data) {
+                // Set financial data with fallbacks in case parts are missing
+                setVietnamStockData(data.vietnamStocks || FALLBACK_VIETNAM_STOCKS);
+                setWorldStockData(data.worldStocks || FALLBACK_WORLD_STOCKS);
+                setForexData(data.forex || FALLBACK_FOREX_DATA);
+                setGoldData(data.goldPrices || FALLBACK_GOLD_PRICES);
+                setFuelData(data.fuelPrices || FALLBACK_FUEL_PRICES);
 
-            const finData = parseGeminiJson<{vietnamStocks: StockData[], worldStocks: StockData[], forex: ForexData[], goldPrices: GoldPrices, fuelPrices: FuelPrices}>(financeResponse.text);
-            if (finData) {
-                setVietnamStockData(finData.vietnamStocks || FALLBACK_VIETNAM_STOCKS);
-                setWorldStockData(finData.worldStocks || FALLBACK_WORLD_STOCKS);
-                setForexData(finData.forex || FALLBACK_FOREX_DATA);
-                setGoldData(finData.goldPrices || FALLBACK_GOLD_PRICES);
-                setFuelData(finData.fuelPrices || FALLBACK_FUEL_PRICES);
-            } else throw new Error("Finance data parsing failed.");
-
-            const weatherArray = parseGeminiJson<WeatherData[]>(weatherResponse.text);
-            if (weatherArray && weatherArray.length > 0) {
-                const weatherMap = new Map<string, WeatherData>();
-                for (const cityName of CITIES_FOR_WEATHER) {
-                    const data = weatherArray.find(d => d.city.toLowerCase() === cityName.toLowerCase());
-                    if (data) {
-                        weatherMap.set(cityName, data);
+                // Set weather data only if it's valid
+                if (data.weatherData && data.weatherData.length > 0) {
+                    const weatherMap = new Map<string, WeatherData>();
+                    for (const weather of data.weatherData) {
+                        // Find the original city name to handle case differences from AI
+                        const originalCityName = CITIES_FOR_WEATHER.find(c => c.toLowerCase() === weather.city.toLowerCase());
+                        if (originalCityName) {
+                            weatherMap.set(originalCityName, weather);
+                        }
                     }
+                    setWeatherData(weatherMap);
+                } else {
+                    setWeatherData(null); // Explicitly set to null if not returned
                 }
-                setWeatherData(weatherMap);
             } else {
-                 await fetchFallbackWeatherData();
+                throw new Error("Gemini không trả về dữ liệu kết hợp hợp lệ.");
             }
         } catch (e) {
-            console.error("Lỗi lấy dữ liệu nền từ Gemini. Kích hoạt chế độ dự phòng.", e);
-            setVietnamStockData(FALLBACK_VIETNAM_STOCKS); setWorldStockData(FALLBACK_WORLD_STOCKS); setForexData(FALLBACK_FOREX_DATA); setGoldData(FALLBACK_GOLD_PRICES); setFuelData(FALLBACK_FUEL_PRICES);
-            await fetchFallbackWeatherData();
+            console.error("Lỗi nghiêm trọng khi lấy dữ liệu nền từ Gemini. Sử dụng dữ liệu dự phòng.", e);
+            setVietnamStockData(FALLBACK_VIETNAM_STOCKS); 
+            setWorldStockData(FALLBACK_WORLD_STOCKS); 
+            setForexData(FALLBACK_FOREX_DATA); 
+            setGoldData(FALLBACK_GOLD_PRICES); 
+            setFuelData(FALLBACK_FUEL_PRICES);
+            setWeatherData(null);
         }
-    }, [fetchFallbackWeatherData]);
+    }, []);
 
     const fetchManualBreakingNews = useCallback(async (topic: string, count: number) => {
         setIsManualNewsLoading(true);
@@ -322,22 +291,7 @@ export const useTicker = () => {
         setManualNewsError(null);
     }, []);
     
-    // --- UI Logic Callbacks & Memos ---
-    const toggleBreakingNewsMode = useCallback(() => {
-        if (animationState !== 'idle') return;
-        setAnimationState('flipping');
-        setTimeout(() => {
-            setIsBreakingNewsMode(prev => {
-                if (prev) {
-                    setCustomBreakingNewsTitle(null);
-                }
-                return !prev;
-            });
-            setNewsItems([]); // Clear news to show loading state
-        }, 300);
-        setTimeout(() => setAnimationState('idle'), 600);
-    }, [animationState]);
-    
+    // --- UI Logic & Memos ---
     const newsString = useMemo(() => {
         if (error) return error;
         if (newsItems.length === 0) return 'Đang tải tin tức...';
@@ -345,16 +299,40 @@ export const useTicker = () => {
         const formatNewsItem = (item: string) => `\u00A0\u00A0\u00A0\u00A0\u00A0${item.trim().replace(/\.$/, '')}\u00A0\u00A0\u00A0\u00A0\u00A0`;
         return newsItems.map(formatNewsItem).join(SEPARATOR);
     }, [newsItems, error]);
+
+    const availableInfoBars = useMemo(() => {
+        const bars: Array<'weather' | 'stocks' | 'forex' | 'gold' | 'fuel'> = [];
+        if (weatherData && weatherData.size > 0) bars.push('weather');
+        if (vietnamStockData || worldStockData) bars.push('stocks');
+        if (forexData) bars.push('forex');
+        if (goldData) bars.push('gold');
+        if (fuelData) bars.push('fuel');
+        return bars.length > 0 ? bars : [];
+    }, [weatherData, vietnamStockData, worldStockData, forexData, goldData, fuelData]);
     
     const switchToNextInfoBar = useCallback(() => {
-      if (bottomBarAnimationState !== 'idle') return;
+      if (bottomBarAnimationState !== 'idle' || availableInfoBars.length === 0) return;
       setBottomBarAnimationState('flipping');
       setTimeout(() => {
-          setCurrentInfoBar(prev => INFO_BAR_ORDER[(INFO_BAR_ORDER.indexOf(prev) + 1) % INFO_BAR_ORDER.length]);
+          setCurrentInfoBar(prev => {
+              const currentIndex = availableInfoBars.indexOf(prev);
+              const nextIndex = (currentIndex + 1) % availableInfoBars.length;
+              return availableInfoBars[nextIndex] || availableInfoBars[0];
+          });
           setStockView('vietnam'); setGoldView('domestic'); setFuelView('domestic');
       }, 300);
       setTimeout(() => setBottomBarAnimationState('idle'), 600);
-    }, [bottomBarAnimationState]);
+    }, [bottomBarAnimationState, availableInfoBars]);
+
+    const toggleBreakingNewsMode = useCallback(() => {
+        if (animationState !== 'idle') return;
+        setAnimationState('flipping');
+        setTimeout(() => {
+            setIsBreakingNewsMode(prev => { if (prev) setCustomBreakingNewsTitle(null); return !prev; });
+            setNewsItems([]);
+        }, 300);
+        setTimeout(() => setAnimationState('idle'), 600);
+    }, [animationState]);
     
     const currentCityName = CITIES_FOR_WEATHER[currentCityIndex];
     const currentCityWeather = weatherData ? (weatherData.get(currentCityName) || null) : null;
@@ -375,37 +353,63 @@ export const useTicker = () => {
     }, [fetchNews, fetchBackgroundData]);
 
     useEffect(() => {
-        if (currentInfoBar !== 'weather') return;
+        if (currentInfoBar !== 'weather' || availableInfoBars.length === 0) return;
+        
         const cityInterval = setInterval(() => {
             setCurrentCityIndex(prev => {
-                if (prev + 1 >= CITIES_FOR_WEATHER.length) { 
+                const nextIndex = prev + 1;
+                if (nextIndex >= CITIES_FOR_WEATHER.length) { 
                     switchToNextInfoBar(); 
                     return 0; 
                 }
-                return prev + 1;
+                return nextIndex;
             });
         }, WEATHER_CITY_DURATION);
         return () => clearInterval(cityInterval);
-    }, [currentInfoBar, switchToNextInfoBar]);
+    }, [currentInfoBar, switchToNextInfoBar, availableInfoBars]);
 
     useEffect(() => {
-        if (currentInfoBar === 'weather' || bottomBarAnimationState !== 'idle') return;
+        if (currentInfoBar === 'weather' || bottomBarAnimationState !== 'idle' || availableInfoBars.length === 0) return;
         const switchTimer = setTimeout(switchToNextInfoBar, NON_WEATHER_BAR_DURATION);
         return () => clearTimeout(switchTimer);
-    }, [currentInfoBar, bottomBarAnimationState, switchToNextInfoBar]);
+    }, [currentInfoBar, bottomBarAnimationState, switchToNextInfoBar, availableInfoBars]);
+
+    // Set initial info bar based on available data
+    useEffect(() => {
+        if (availableInfoBars.length > 0) {
+            setCurrentInfoBar(availableInfoBars[0]);
+        }
+    }, [availableInfoBars]);
 
     useEffect(() => { if (currentInfoBar === 'stocks') { const i = setInterval(() => setStockView(p => p === 'vietnam' ? 'world' : 'vietnam'), 7000); return () => clearInterval(i); }}, [currentInfoBar]);
     useEffect(() => { if (currentInfoBar === 'gold') { const i = setInterval(() => setGoldView(p => p === 'domestic' ? 'world' : 'domestic'), 7000); return () => clearInterval(i); }}, [currentInfoBar]);
     useEffect(() => { if (currentInfoBar === 'fuel') { const i = setInterval(() => setFuelView(p => p === 'domestic' ? 'world' : 'domestic'), 7000); return () => clearInterval(i); }}, [currentInfoBar]);
 
     return {
-        newsItems, error, vietnamStockData, worldStockData, forexData, goldData, fuelData,
-        isBreakingNewsMode, customBreakingNewsTitle, animationState, bottomBarAnimationState, isManualInputPanelOpen, isManualNewsLoading,
-        currentInfoBar, stockView, goldView, fuelView,
+        isErrorState,
+        newsItems,
+        error,
+        vietnamStockData,
+        worldStockData,
+        forexData,
+        goldData,
+        fuelData,
+        isBreakingNewsMode,
+        customBreakingNewsTitle,
+        animationState,
+        bottomBarAnimationState,
+        isManualInputPanelOpen,
+        isManualNewsLoading,
+        manualNewsError,
+        currentInfoBar,
+        stockView,
+        goldView,
+        fuelView,
         currentCityWeather,
         newsString,
-        manualNewsError,
-        isErrorState,
-        toggleBreakingNewsMode, fetchManualBreakingNews, openManualPanel, closeManualPanel,
+        toggleBreakingNewsMode,
+        fetchManualBreakingNews,
+        openManualPanel,
+        closeManualPanel,
     };
 };
