@@ -2,9 +2,46 @@ import React from 'react';
 import { useTicker } from './useTicker';
 import { ManualNewsInputPanel, Clock, BreakingNewsTag, ScrollingNews, BottomBar } from './components';
 
+const ApiKeyErrorScreen = () => (
+  <div className="fixed inset-0 bg-gray-900 text-white flex items-center justify-center p-8">
+    <div className="bg-gray-800 p-8 rounded-lg shadow-2xl max-w-2xl text-center border border-red-500">
+      <h1 className="text-3xl font-bold text-red-500 mb-4">Lỗi Cấu Hình API Key</h1>
+      <p className="text-lg mb-6">
+        Ứng dụng không thể tìm thấy biến môi trường chứa API Key của Google Gemini.
+      </p>
+      <div className="text-left bg-gray-900 p-6 rounded-md">
+        <p className="text-lg font-semibold mb-3">Vui lòng thực hiện các bước sau trên Vercel:</p>
+        <ol className="list-decimal list-inside space-y-3">
+          <li>Đi đến trang cài đặt (Settings) của dự án Vercel của bạn.</li>
+          <li>Chọn mục <strong>Environment Variables</strong>.</li>
+          <li>
+            Tạo một biến mới với tên (key) là:
+            <code className="bg-yellow-400 text-black font-mono font-bold px-2 py-1 rounded-md mx-2">VITE_API_KEYS</code>
+          </li>
+          <li>
+            Trong phần giá trị (value), dán (các) API key của bạn vào. Nếu có nhiều key, hãy ngăn cách chúng bằng dấu phẩy.
+            <br />
+            <span className="text-gray-400 text-sm block mt-1">Ví dụ: <code className="bg-gray-700 px-1 py-0.5 rounded">key_thu_nhat,key_thu_hai</code></span>
+          </li>
+          <li>Lưu lại và triển khai lại (Redeploy) phiên bản mới nhất.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+);
+
+
 // --- Main App Component (Presentation Layer) ---
 const App = () => {
+  if (!import.meta.env.VITE_API_KEYS) {
+    return <ApiKeyErrorScreen />;
+  }
+
   const ticker = useTicker();
+
+  if (ticker.isErrorState) {
+     return <ApiKeyErrorScreen />;
+  }
 
   return (
     <>
@@ -33,6 +70,7 @@ const App = () => {
           </div>
         </div>
         <BottomBar
+            isInitialLoad={ticker.isInitialLoad}
             isBreakingNewsMode={ticker.isBreakingNewsMode}
             currentInfoBar={ticker.currentInfoBar}
             bottomBarAnimationState={ticker.bottomBarAnimationState}
