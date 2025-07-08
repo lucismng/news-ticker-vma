@@ -1,0 +1,6 @@
+{
+  "name": "News Ticker by VMA",
+  "description": "Một lớp phủ ticker tin tức chuyên nghiệp cho OBS, được cung cấp bởi Gemini, để tìm nạp và tóm tắt tin tức, chứng khoán, và thời tiết từ Việt Nam. Nó có một thanh thời tiết động cho các tỉnh thành và một biểu ngữ tin tức cuộn mượt mà, mô phỏng phong cách phát sóng quốc gia.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

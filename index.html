@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Broadcast Ticker Overlay</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    /* Ensure a transparent background for the OBS overlay */
+    html, body {
+      background-color: transparent;
+      margin: 0;
+      padding: 0;
+      overflow: hidden; /* Prevent scrollbars on the body itself */
+      font-family: 'Roboto', sans-serif;
+    }
+
+    /* Custom keyframes for the continuous horizontal scroll */
+    @keyframes scroll-left {
+      from {
+        transform: translateX(0%);
+      }
+      to {
+        transform: translateX(-50%);
+      }
+    }
+    .animate-scroll-left {
+      animation-name: scroll-left;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+    
+    /* Keyframes for the 3D flip effect */
+    @keyframes flip-effect {
+      0% {
+        transform: rotateX(0deg);
+      }
+      50% {
+        transform: rotateX(-90deg);
+      }
+      100% {
+        transform: rotateX(0deg);
+      }
+    }
+    
+    .animate-flip {
+      animation-name: flip-effect;
+      animation-duration: 600ms; /* Must match the JS timeouts */
+      animation-timing-function: ease-in-out;
+    }
+
+    /* Keyframes for fade-in-down */
+    @keyframes fade-in-down {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .animate-fade-in-down {
+      animation: fade-in-down 300ms ease-out forwards;
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "vite": "https://esm.sh/vite@^7.0.2",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^4.6.0",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.8.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/index.tsx"></script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
