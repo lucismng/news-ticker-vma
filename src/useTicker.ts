@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { WeatherData, StockData, ForexData, GoldPrices, FuelPrices } from './types';
 import { GoogleGenAI } from '@google/genai';
 
@@ -149,7 +149,7 @@ export const useTicker = () => {
             return;
         }
 
-        const prompt = `Liệt kê 10 tin tức nóng hổi, quan trọng nhất tại Việt Nam và thế giới trong giờ qua. Trả về dưới dạng một mảng JSON các chuỗi tóm tắt. Ví dụ: ["Tóm tắt tin tức 1", "Tóm tắt tin tức 2"]`;
+        const prompt = `Liệt kê 10 tin tức nóng hổi, quan trọng nhất tại Việt Nam và thế giới trong giờ qua. Hãy sử dụng văn phong báo chí trung lập, khách quan, tránh các từ ngữ nhạy cảm hoặc gây tranh cãi. Trả về dưới dạng một mảng JSON các chuỗi tóm tắt. Ví dụ: ["Tóm tắt tin tức 1", "Tóm tắt tin tức 2"]`;
         try {
             const response = await ai.models.generateContent({ model: geminiModel, contents: prompt, config: { tools: [{googleSearch: {}}] } });
             const summaries = parseGeminiJson<string[]>(response.text);
@@ -250,19 +250,30 @@ export const useTicker = () => {
     }, [fetchFallbackWeatherData]);
 
     const fetchManualBreakingNews = useCallback(async (topic: string, count: number) => {
-        setIsManualNewsLoading(true); setIsManualInputPanelOpen(false); setError(null); setNewsItems([]);
-        const prompt = `Tạo JSON với khóa "title" (tiêu đề siêu ngắn cho "${topic}") và "summaries" (mảng ${count} tóm tắt tin tức mới nhất, phù hợp nhất liên quan đến chủ đề này trong vòng 1 giờ vừa qua). Ưu tiên các tin tức có nguồn uy tín.`;
+        setIsManualNewsLoading(true);
+        setIsManualInputPanelOpen(false);
+        
+        const prompt = `Tạo JSON với khóa "title" (tiêu đề siêu ngắn cho "${topic}") và "summaries" (mảng ${count} tóm tắt tin tức mới nhất liên quan đến chủ đề này trong vòng 1 giờ qua). Hãy tóm tắt với văn phong báo chí trung lập, khách quan, phù hợp với mọi đối tượng và tránh các từ ngữ nhạy cảm hoặc gây tranh cãi. Ưu tiên các tin tức có nguồn uy tín.`;
+
         try {
             const response = await ai.models.generateContent({ model: geminiModel, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
             const data = parseGeminiJson<{ title: string, summaries: string[] }>(response.text);
+
             if (data?.title && data?.summaries?.length > 0) {
                 setAnimationState('flipping');
-                setTimeout(() => { setIsBreakingNewsMode(true); setCustomBreakingNewsTitle(data.title.toUpperCase()); setNewsItems(data.summaries); }, 300);
-                setTimeout(() => { setAnimationState('idle'); }, 600);
-            } else throw new Error("AI không trả về dữ liệu hợp lệ.");
+                setTimeout(() => {
+                    setIsBreakingNewsMode(true);
+                    setCustomBreakingNewsTitle(data.title.toUpperCase());
+                    setNewsItems(data.summaries);
+                }, 300);
+                setTimeout(() => {
+                    setAnimationState('idle');
+                }, 600);
+            } else {
+                 console.error("Lỗi tạo tin tức thủ công: AI không trả về dữ liệu hợp lệ.");
+            }
         } catch (e) {
-            setError(`Lỗi: ${e instanceof Error ? e.message : "Không xác định"}. Thử lại.`);
-            setIsBreakingNewsMode(false);
+            console.error("Lỗi khi gọi API tạo tin tức thủ công:", e);
         } finally {
             setIsManualNewsLoading(false);
         }
@@ -272,7 +283,15 @@ export const useTicker = () => {
     const toggleBreakingNewsMode = useCallback(() => {
         if (animationState !== 'idle') return;
         setAnimationState('flipping');
-        setTimeout(() => { setIsBreakingNewsMode(prev => { if (prev) setCustomBreakingNewsTitle(null); return !prev; }); setNewsItems([]); }, 300);
+        setTimeout(() => {
+            setIsBreakingNewsMode(prev => {
+                if (prev) {
+                    setCustomBreakingNewsTitle(null);
+                }
+                return !prev;
+            });
+            setNewsItems([]); // Clear news to show loading state
+        }, 300);
         setTimeout(() => setAnimationState('idle'), 600);
     }, [animationState]);
     
