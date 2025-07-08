@@ -76,12 +76,12 @@ const parseGeminiJson = <T,>(text: string): T | null => {
 };
 
 interface CombinedData {
-    weatherData: WeatherData[];
-    vietnamStocks: StockData[];
-    worldStocks: StockData[];
-    forex: ForexData[];
-    goldPrices: GoldPrices;
-    fuelPrices: FuelPrices;
+    weatherData?: WeatherData[];
+    vietnamStocks?: StockData[];
+    worldStocks?: StockData[];
+    forex?: ForexData[];
+    goldPrices?: GoldPrices;
+    fuelPrices?: FuelPrices;
 }
 
 // --- Main Logic Hook ---
@@ -97,6 +97,7 @@ export const useTicker = () => {
     const [fuelData, setFuelData] = useState<FuelPrices | null>(null);
 
     // UI & Animation State
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [isBreakingNewsMode, setIsBreakingNewsMode] = useState(false);
     const [customBreakingNewsTitle, setCustomBreakingNewsTitle] = useState<string | null>(null);
     const [animationState, setAnimationState] = useState<'idle' | 'flipping'>('idle');
@@ -204,26 +205,23 @@ Hãy đảm bảo dữ liệu là chính xác và mới nhất.`;
             const data = parseGeminiJson<CombinedData>(response.text);
             
             if (data) {
-                // Set financial data with fallbacks in case parts are missing
                 setVietnamStockData(data.vietnamStocks || FALLBACK_VIETNAM_STOCKS);
                 setWorldStockData(data.worldStocks || FALLBACK_WORLD_STOCKS);
                 setForexData(data.forex || FALLBACK_FOREX_DATA);
                 setGoldData(data.goldPrices || FALLBACK_GOLD_PRICES);
                 setFuelData(data.fuelPrices || FALLBACK_FUEL_PRICES);
 
-                // Set weather data only if it's valid
                 if (data.weatherData && data.weatherData.length > 0) {
                     const weatherMap = new Map<string, WeatherData>();
-                    for (const weather of data.weatherData) {
-                        // Find the original city name to handle case differences from AI
+                    data.weatherData.forEach(weather => {
                         const originalCityName = CITIES_FOR_WEATHER.find(c => c.toLowerCase() === weather.city.toLowerCase());
                         if (originalCityName) {
                             weatherMap.set(originalCityName, weather);
                         }
-                    }
+                    });
                     setWeatherData(weatherMap);
                 } else {
-                    setWeatherData(null); // Explicitly set to null if not returned
+                    setWeatherData(null);
                 }
             } else {
                 throw new Error("Gemini không trả về dữ liệu kết hợp hợp lệ.");
@@ -353,7 +351,19 @@ Hãy đảm bảo dữ liệu là chính xác và mới nhất.`;
     }, [fetchNews, fetchBackgroundData]);
 
     useEffect(() => {
-        if (currentInfoBar !== 'weather' || availableInfoBars.length === 0) return;
+        if (isInitialLoad && availableInfoBars.length > 0) {
+            setBottomBarAnimationState('flipping');
+            setTimeout(() => {
+                setIsInitialLoad(false);
+            }, 300);
+            setTimeout(() => {
+                setBottomBarAnimationState('idle');
+            }, 600);
+        }
+    }, [availableInfoBars, isInitialLoad]);
+
+    useEffect(() => {
+        if (isInitialLoad || currentInfoBar !== 'weather' || availableInfoBars.length === 0) return;
         
         const cityInterval = setInterval(() => {
             setCurrentCityIndex(prev => {
@@ -366,27 +376,32 @@ Hãy đảm bảo dữ liệu là chính xác và mới nhất.`;
             });
         }, WEATHER_CITY_DURATION);
         return () => clearInterval(cityInterval);
-    }, [currentInfoBar, switchToNextInfoBar, availableInfoBars]);
+    }, [currentInfoBar, switchToNextInfoBar, availableInfoBars, isInitialLoad]);
 
     useEffect(() => {
-        if (currentInfoBar === 'weather' || bottomBarAnimationState !== 'idle' || availableInfoBars.length === 0) return;
+        if (isInitialLoad || currentInfoBar === 'weather' || bottomBarAnimationState !== 'idle' || availableInfoBars.length === 0) return;
         const switchTimer = setTimeout(switchToNextInfoBar, NON_WEATHER_BAR_DURATION);
         return () => clearTimeout(switchTimer);
-    }, [currentInfoBar, bottomBarAnimationState, switchToNextInfoBar, availableInfoBars]);
+    }, [currentInfoBar, bottomBarAnimationState, switchToNextInfoBar, availableInfoBars, isInitialLoad]);
 
     // Set initial info bar based on available data
     useEffect(() => {
+        if (availableInfoBars.length > 0 && isInitialLoad) {
+            // Don't set the info bar until the initial load is done
+            return;
+        }
         if (availableInfoBars.length > 0) {
             setCurrentInfoBar(availableInfoBars[0]);
         }
-    }, [availableInfoBars]);
+    }, [availableInfoBars, isInitialLoad]);
 
-    useEffect(() => { if (currentInfoBar === 'stocks') { const i = setInterval(() => setStockView(p => p === 'vietnam' ? 'world' : 'vietnam'), 7000); return () => clearInterval(i); }}, [currentInfoBar]);
-    useEffect(() => { if (currentInfoBar === 'gold') { const i = setInterval(() => setGoldView(p => p === 'domestic' ? 'world' : 'domestic'), 7000); return () => clearInterval(i); }}, [currentInfoBar]);
-    useEffect(() => { if (currentInfoBar === 'fuel') { const i = setInterval(() => setFuelView(p => p === 'domestic' ? 'world' : 'domestic'), 7000); return () => clearInterval(i); }}, [currentInfoBar]);
+    useEffect(() => { if (!isInitialLoad && currentInfoBar === 'stocks') { const i = setInterval(() => setStockView(p => p === 'vietnam' ? 'world' : 'vietnam'), 7000); return () => clearInterval(i); }}, [currentInfoBar, isInitialLoad]);
+    useEffect(() => { if (!isInitialLoad && currentInfoBar === 'gold') { const i = setInterval(() => setGoldView(p => p === 'domestic' ? 'world' : 'domestic'), 7000); return () => clearInterval(i); }}, [currentInfoBar, isInitialLoad]);
+    useEffect(() => { if (!isInitialLoad && currentInfoBar === 'fuel') { const i = setInterval(() => setFuelView(p => p === 'domestic' ? 'world' : 'domestic'), 7000); return () => clearInterval(i); }}, [currentInfoBar, isInitialLoad]);
 
     return {
         isErrorState,
+        isInitialLoad,
         newsItems,
         error,
         vietnamStockData,
