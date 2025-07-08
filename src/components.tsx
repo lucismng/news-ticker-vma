@@ -143,6 +143,7 @@ export const ManualNewsInputPanel = ({ isOpen, onClose, onSubmit, isLoading, err
 };
 
 export const BottomBar = (props: {
+    isInitialLoad: boolean,
     isBreakingNewsMode: boolean,
     currentInfoBar: 'weather' | 'stocks' | 'forex' | 'gold' | 'fuel',
     bottomBarAnimationState: 'idle' | 'flipping',
@@ -158,6 +159,20 @@ export const BottomBar = (props: {
     fuelData: FuelPrices | null
 }) => {
     let content, label;
+    
+    if (props.isInitialLoad) {
+        const backgroundStyle = props.isBreakingNewsMode ? { background: 'linear-gradient(to bottom, #A00000, #700000)' } : { background: 'linear-gradient(to bottom, #007BFF, #0056b3)' };
+        return (
+            <div className={`relative ${props.bottomBarAnimationState === 'flipping' ? 'animate-flip' : ''}`} style={{ transformStyle: 'preserve-3d' }}>
+                <div className="flex h-11 items-center justify-center px-5 text-base tracking-wide text-white rounded-b-lg transition-all duration-300 ease-in-out" style={backgroundStyle}>
+                    <button onClick={props.onLabelClick} className="uppercase font-extrabold text-center focus:outline-none hover:opacity-80 transition-opacity duration-200 text-sm">
+                        VMA - Vietnam Media Archive
+                    </button>
+                </div>
+            </div>
+        );
+    }
+    
     switch (props.currentInfoBar) {
         case 'stocks':
             content = <StockMarketBar data={props.stockView === 'vietnam' ? props.vietnamStockData : props.worldStockData} isBreakingNewsMode={props.isBreakingNewsMode} />;
