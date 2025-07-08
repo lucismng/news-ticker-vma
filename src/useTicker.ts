@@ -85,6 +85,7 @@ export const useTicker = () => {
     const [bottomBarAnimationState, setBottomBarAnimationState] = useState<'idle' | 'flipping'>('idle');
     const [isManualInputPanelOpen, setIsManualInputPanelOpen] = useState(false);
     const [isManualNewsLoading, setIsManualNewsLoading] = useState(false);
+    const [manualNewsError, setManualNewsError] = useState<string | null>(null);
     
     // Ticker View State
     const [currentInfoBar, setCurrentInfoBar] = useState<'weather' | 'stocks' | 'forex' | 'gold' | 'fuel'>('weather');
@@ -251,7 +252,7 @@ export const useTicker = () => {
 
     const fetchManualBreakingNews = useCallback(async (topic: string, count: number) => {
         setIsManualNewsLoading(true);
-        setIsManualInputPanelOpen(false);
+        setManualNewsError(null);
         
         const prompt = `Tạo JSON với khóa "title" (tiêu đề siêu ngắn cho "${topic}") và "summaries" (mảng ${count} tóm tắt tin tức mới nhất liên quan đến chủ đề này trong vòng 1 giờ qua). Hãy tóm tắt với văn phong báo chí trung lập, khách quan, phù hợp với mọi đối tượng và tránh các từ ngữ nhạy cảm hoặc gây tranh cãi. Ưu tiên các tin tức có nguồn uy tín.`;
 
@@ -269,14 +270,29 @@ export const useTicker = () => {
                 setTimeout(() => {
                     setAnimationState('idle');
                 }, 600);
+                setIsManualInputPanelOpen(false); // Close panel on success
             } else {
-                 console.error("Lỗi tạo tin tức thủ công: AI không trả về dữ liệu hợp lệ.");
+                 const errorMsg = "AI không trả về dữ liệu hợp lệ. Vui lòng thử lại với chủ đề khác.";
+                 console.error("Lỗi tạo tin tức thủ công:", errorMsg);
+                 setManualNewsError(errorMsg);
             }
         } catch (e) {
+            const errorMessage = e instanceof Error ? e.message : "Lỗi không xác định";
             console.error("Lỗi khi gọi API tạo tin tức thủ công:", e);
+            setManualNewsError(`Lỗi API: ${errorMessage}.`);
         } finally {
             setIsManualNewsLoading(false);
         }
+    }, []);
+
+    const openManualPanel = useCallback(() => {
+        setIsManualInputPanelOpen(true);
+        setManualNewsError(null);
+    }, []);
+
+    const closeManualPanel = useCallback(() => {
+        setIsManualInputPanelOpen(false);
+        setManualNewsError(null);
     }, []);
     
     // --- UI Logic Callbacks & Memos ---
@@ -357,6 +373,7 @@ export const useTicker = () => {
         currentInfoBar, stockView, goldView, fuelView,
         currentCityWeather,
         newsString,
-        toggleBreakingNewsMode, fetchManualBreakingNews, setIsManualInputPanelOpen
+        manualNewsError,
+        toggleBreakingNewsMode, fetchManualBreakingNews, openManualPanel, closeManualPanel,
     };
 };
