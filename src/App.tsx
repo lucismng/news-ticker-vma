@@ -36,8 +36,7 @@ const App = () => {
             currentInfoBar={ticker.currentInfoBar}
             bottomBarAnimationState={ticker.bottomBarAnimationState}
             onLabelClick={() => ticker.setIsManualInputPanelOpen(true)}
-            weatherData={ticker.weatherData}
-            currentCityIndex={ticker.currentCityIndex}
+            currentCityWeather={ticker.currentCityWeather}
             stockView={ticker.stockView}
             vietnamStockData={ticker.vietnamStockData}
             worldStockData={ticker.worldStockData}
