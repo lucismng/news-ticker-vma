@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useTicker } from './useTicker';
 import { ManualNewsInputPanel, Clock, BreakingNewsTag, ScrollingNews, BottomBar } from './components';

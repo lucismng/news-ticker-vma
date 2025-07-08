@@ -1,10 +1,10 @@
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { WeatherData, StockData, ForexData, GoldPrices, FuelPrices } from './types';
 import { GoogleGenAI } from '@google/genai';
 
 // --- Gemini AI Setup ---
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
 const geminiModel = 'gemini-2.5-flash-preview-04-17';
 
 // --- DATA & COORDINATES ---
